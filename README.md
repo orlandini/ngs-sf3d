@@ -6,3 +6,6 @@ This project aims to simulate the propagation of eigenmodes of optical waveguide
 obtained through modal analysis, in three dimensions, with special interest in
 analysing the efficiency of combinations of preconditioners and iterative solvers
 for the linear system of the 3D model.
+
+
+    python3 -i ./src/sf3d.py
