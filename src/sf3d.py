@@ -3,9 +3,10 @@ from numpy import random
 import netgen.gui
 from netgen.occ import *
 import os
-
 from geo import GenMesh
 from modal import ModalAnalysis
+
+ngsglobals.msg_level = 1
 
 MESH_FILE_NAME = "sf3d.vol"
 # all dimensions are in microns
@@ -21,13 +22,13 @@ r_cyl = 8  # core radius
 # distance from center to end of cladding region(inner box)
 d_box = r_cyl + 3.5 * wl/nclad
 l_domain = 6*wl
-d_pml = 0.5*wl/nclad  # pml width
-elsize = 0.75
+d_pml = 1.5*wl/nclad  # pml width
+elsize = 0.8
 # element sizes are different in cladding or core
 el_clad = elsize*wl/nclad  # el size in cladding
 el_core = elsize*wl/ncore  # el size in core
-p_modal = 1  # polynomial order of hcurl space in modal analysis
-p_scatt = 1  # polynomial order of scattering analysis
+p_modal = 2  # polynomial order of hcurl space in modal analysis
+p_scatt = 2  # polynomial order of scattering analysis
 
 gen_mesh = True
 if gen_mesh or not os.path.isfile(MESH_FILE_NAME):
@@ -40,8 +41,8 @@ surflist = {"core_2d": 1, "clad_2d": 2, "dirichlet_3d": 3}
 surf = mesh.BoundaryCF(surflist)
 gu = GridFunction(H1(mesh), name='surfs')
 gu.Set(surf, definedon=~mesh.Boundaries(''))
-Draw(mesh)
-print("Checking 2D domains... press Enter to continue")
+Draw(gu)
+# print("Checking 2D domains... press Enter to continue")
 # input()
 
 # #checking volume domains
@@ -123,7 +124,7 @@ ur = CoefficientFunction(1)
 
 # setting up PMLs
 
-alphapml = 0.5j
+alphapml = 0.75j
 
 mesh.SetPML(
     pml.Cartesian(
@@ -197,26 +198,45 @@ thus, our rhs is
 
 kzero = 2*pi/wl
 # we take the dominant mode
-beta = sqrt(-ev[0])
-sol2d_hcurl = sol2d.components[0]
+which = 0
+beta = sqrt(-ev[which])
+sol2d_hcurl = sol2d.components[0].MDComponent(which)
 a = BilinearForm(fes3d, symmetric=True)
 a += ((1./ur) * curl(u) * curl(v) - kzero**2 * er * u * v)*dx
+# a += (1j * kzero * u.Trace() * v.Trace() )*ds("clad_2d|core_2d")
 a.Assemble()
 c = Preconditioner(a, "bddc")
 
 f = LinearForm(fes3d)
-f += (-2j * beta * (sol2d_hcurl[0] * v.Trace()
-      [0] - sol2d_hcurl[1] * v.Trace()[1])*ds("clad_2d|core_2d"))
-# f += (-2j * sol2d_hcurl * v.Trace())*ds("clad_2d|core_2d")
+# f += (2j * beta * (1./ur) *(sol2d_hcurl[0] * v.Trace()[0]
+#       [0] - sol2d_hcurl[1] * v.Trace()[1]))*ds("clad_2d|core_2d")
+
+f += (-2j * sol2d_hcurl.Trace() * v.Trace())*ds("clad_2d|core_2d")
 
 with TaskManager():
     a.Assemble()
     f.Assemble()
 
 gfu = GridFunction(fes3d)
+
+res = f.vec.CreateVector()
+# with TaskManager():
+#     gfu.vec.data = a.mat.Inverse(
+#         fes3d.FreeDofs(),
+#         inverse="pardiso") * f.vec
+
+
+
+print("solving system with ndofs {}".format(sum(fes3d.FreeDofs())))
 with TaskManager():
+    # gmr = GM(mat=a.mat, pre=c.mat, maxiter=200,
+    #          tol=1e-15, printrates=True)
     gmr = GMRESSolver(mat=a.mat, pre=c.mat, maxsteps=200,
-                      precision=1e-12, printrates=True)
+                      precision=1e-13, printrates=True)
     gfu.vec.data = gmr * f.vec
+
+bc_projector = Projector(fes3d.FreeDofs(), True)
+res.data = bc_projector*(f.vec - a.mat * gfu.vec)
+print("res norm {}".format(Norm(res)))
 
 Draw(gfu, mesh, "sol3d")
