@@ -182,18 +182,27 @@ The scattered fields are the same on both sides
 
 both fields can be expressed as
 
-E1 = Em(x,y) e^{+j beta z}
-E2 = Em(x,y) e^{-j beta z}
+E1 = Em(x,y) e^{+j beta z} + Es
+E2 = Em(x,y) e^{-j beta z} + Es
 
-where Em is the modal analysis obtained field, in 3d
+where Em is the modal analysis obtained field, and Es is the scattered field.
+Calling n1 the outward normal vector in the left side and n2 the normal vector in the right side,  we then have
 
-we then have
+n1 \cross curl(E1) =  z \cross (curl E1)
+                   =  z \cross (curl Es) + grad_t Emz - j beta Emt
+n2 \cross curl(E2) = -z \cross (curl E2)
+                   = -z \cross (curl Es) - grad_t Emz - j beta Emt
 
-n \cross curl(E1) = (dxEmz, -dyEmz, 0) + jbeta(-Emx,Emy,0)
--n \cross curl(E2) =(dxEmz, -dyEmz, 0) - jbeta(-Emx,Emy,0)
-thus, our rhs is
 
--2 j beta (-Emx, Emy, 0) . F ds
+Where Emt is the tangential component of the Em field and Emz is the longitudinal component.
+
+Assuming now that the curl Es is continuous on the interface (can we assume that?),
+
+we have
+
+n1 \cross curl E1 + n2 \cross curl E2 =
+
+-2 j beta (Emx, Emy, 0) . F ds = - 2 j beta Em.Trace() * F.Trace() ds
 """
 
 kzero = 2*pi/wl
@@ -208,8 +217,8 @@ a.Assemble()
 c = Preconditioner(a, "bddc")
 
 f = LinearForm(fes3d)
-# f += (2j * beta * (1./ur) *(sol2d_hcurl[0] * v.Trace()[0]
-#       [0] - sol2d_hcurl[1] * v.Trace()[1]))*ds("clad_2d|core_2d")
+# recalling that sold2d_hcurl is actually Et * beta,
+# we dont need to insert it in the linear form
 
 f += (-2j * sol2d_hcurl.Trace() * v.Trace())*ds("clad_2d|core_2d")
 
