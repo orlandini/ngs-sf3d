@@ -21,7 +21,7 @@ ncore = 1.4457
 r_cyl = 8  # core radius
 # distance from center to end of cladding region(inner box)
 d_box = r_cyl + 3.5 * wl/nclad
-l_domain = 6*wl
+l_domain = 2*wl
 d_pml = 1.5*wl/nclad  # pml width
 elsize = 0.8
 # element sizes are different in cladding or core
@@ -124,7 +124,7 @@ ur = CoefficientFunction(1)
 
 # setting up PMLs
 
-alphapml = 0.75j
+alphapml = 1.0j
 
 mesh.SetPML(
     pml.Cartesian(
@@ -212,15 +212,15 @@ beta = sqrt(-ev[which])
 sol2d_hcurl = sol2d.components[0].MDComponent(which)
 a = BilinearForm(fes3d, symmetric=True)
 a += ((1./ur) * curl(u) * curl(v) - kzero**2 * er * u * v)*dx
-# a += (1j * kzero * u.Trace() * v.Trace() )*ds("clad_2d|core_2d")
-a.Assemble()
 c = Preconditioner(a, "bddc")
 
 f = LinearForm(fes3d)
 # recalling that sold2d_hcurl is actually Et * beta,
 # we dont need to insert it in the linear form
 
-f += (-2j * sol2d_hcurl.Trace() * v.Trace())*ds("clad_2d|core_2d")
+#ps: i have ommited the ur since it is unitary and i wasnt sure
+#if the coefficient function would play well on the 2d domain
+f += (2j * sol2d_hcurl.Trace() * v.Trace())*ds("clad_2d|core_2d")
 
 with TaskManager():
     a.Assemble()
@@ -238,8 +238,6 @@ res = f.vec.CreateVector()
 
 print("solving system with ndofs {}".format(sum(fes3d.FreeDofs())))
 with TaskManager():
-    # gmr = GM(mat=a.mat, pre=c.mat, maxiter=200,
-    #          tol=1e-15, printrates=True)
     gmr = GMRESSolver(mat=a.mat, pre=c.mat, maxsteps=200,
                       precision=1e-13, printrates=True)
     gfu.vec.data = gmr * f.vec
