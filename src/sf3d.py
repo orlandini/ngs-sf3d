@@ -11,7 +11,7 @@ ngsglobals.msg_level = 1
 MESH_FILE_NAME = "sf3d.vol"
 # all dimensions are in microns
 
-wl = 1.5  # wavelength (in microns)
+wl = 4.0  # wavelength (in microns)
 
 urvals = 1  # relative magnetic permeability
 # refractive indices
@@ -23,7 +23,7 @@ r_cyl = 8  # core radius
 d_box = r_cyl + 3.5 * wl/nclad
 l_domain = 2*wl
 d_pml = 1.5*wl/nclad  # pml width
-elsize = 0.8
+elsize = 0.6
 # element sizes are different in cladding or core
 el_clad = elsize*wl/nclad  # el size in cladding
 el_core = elsize*wl/ncore  # el size in core
@@ -220,7 +220,7 @@ res = f.vec.CreateVector()
 print("solving system with ndofs {}".format(sum(fes3d.FreeDofs())))
 with TaskManager():
     gmr = GMRESSolver(mat=a.mat, pre=c.mat, maxsteps=200,
-                      precision=1e-13, printrates=True)
+                      precision=1e-10, printrates=True)
     gfu.vec.data = gmr * f.vec
 
 bc_projector = Projector(fes3d.FreeDofs(), True)
