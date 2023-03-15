@@ -36,9 +36,20 @@ if gen_mesh or not os.path.isfile(MESH_FILE_NAME):
 
 mesh = Mesh("sf3d.vol").Curve(3)
 
+# setting up PMLs
+
+alphapml = 1.2j/d_pml
+
+boxmin = [-d_box, -d_box, -l_domain/2]
+boxmax = [d_box, d_box, l_domain/2]
+mesh.SetPML(
+    pml.Cartesian(mins=boxmin, maxs=boxmax, alpha=alphapml),
+    "pml_core_back|pml_clad_back|pml_core_front|pml_clad_front|pml_clad_2d")
+
+
 # checking surface domains
-surflist = {"core_2d": 1, "clad_2d": 2, "dirichlet_3d": 3}
-surf = mesh.BoundaryCF(surflist)
+surflist = {"core_2d": 1, "clad_2d": 2, "dirichlet_3d": 3, 'pml_clad_2d':4}
+surf = mesh.BoundaryCF(surflist,-1)
 gu = GridFunction(H1(mesh), name='surfs')
 gu.Set(surf, definedon=~mesh.Boundaries(''))
 Draw(gu)
@@ -55,10 +66,10 @@ Draw(gu)
 
 
 # creating constitutive params for 2d problem
-er2dlist = {"core_2d": ncore**2, "clad_2d": nclad**2}
+er2dlist = {"core_2d": ncore**2, "clad_2d": nclad**2, "pml_clad_2d":nclad**2}
 er2d = mesh.BoundaryCF(er2dlist)
 
-ur2dlist = {"core_2d": 1, "clad_2d": 1}
+ur2dlist = {"core_2d": 1, "clad_2d": 1, "pml_clad_2d": 1}
 
 ur2d = mesh.BoundaryCF(ur2dlist)
 # here we could check if ur2d and er2d are correctly defined
@@ -96,10 +107,10 @@ finite dimensional counterpart is chosen as to respect the de rham diagram
 
 V2d = HCurl(
     mesh, order=p_modal, complex=True, dirichlet_bbnd="dirichlet_2d",
-    definedon=mesh.Boundaries("clad_2d|core_2d"))
+    definedon=mesh.Boundaries("clad_2d|core_2d|pml_clad_2d"))
 Q2d = H1(
     mesh, order=p_modal + 1, complex=True, dirichlet_bbnd="dirichlet_2d",
-    definedon=mesh.Boundaries("clad_2d|core_2d"))
+    definedon=mesh.Boundaries("clad_2d|core_2d|pml_clad_2d"))
 
 fes2d = V2d*Q2d
 
@@ -120,36 +131,6 @@ erlist = {"core": ncore**2, "clad": nclad**2,
 
 er = CoefficientFunction([erlist.get(m, 0) for m in mesh.GetMaterials()])
 ur = CoefficientFunction(1)
-
-
-# setting up PMLs
-
-alphapml = 1.0j
-
-mesh.SetPML(
-    pml.Cartesian(
-        mins=[0, 0, -l_domain / 2],
-        maxs=[0, 0, -(l_domain / 2 + d_pml)],
-        alpha=alphapml),
-    "pml_core_back")
-mesh.SetPML(
-    pml.Cartesian(
-        mins=[0, 0, -l_domain / 2],
-        maxs=[0, 0, -(l_domain / 2 + d_pml)],
-        alpha=alphapml),
-    "pml_clad_back")
-mesh.SetPML(
-    pml.Cartesian(
-        mins=[0, 0, l_domain / 2],
-        maxs=[0, 0, (l_domain / 2 + d_pml)],
-        alpha=alphapml),
-    "pml_core_front")
-mesh.SetPML(
-    pml.Cartesian(
-        mins=[0, 0, l_domain / 2],
-        maxs=[0, 0, (l_domain / 2 + d_pml)],
-        alpha=alphapml),
-    "pml_clad_front")
 
 
 fes3d = HCurl(mesh, order=p_scatt, complex=True,
@@ -220,7 +201,7 @@ f = LinearForm(fes3d)
 
 #ps: i have ommited the ur since it is unitary and i wasnt sure
 #if the coefficient function would play well on the 2d domain
-f += (2j * sol2d_hcurl.Trace() * v.Trace())*ds("clad_2d|core_2d")
+f += (2j * sol2d_hcurl.Trace() * v.Trace())*ds("clad_2d|core_2d|pml_clad_2d")
 
 with TaskManager():
     a.Assemble()
