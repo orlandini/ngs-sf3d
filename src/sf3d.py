@@ -6,6 +6,7 @@ import os
 from geo import GenMesh
 from modal import ModalAnalysis
 
+SetNumThreads(7)
 ngsglobals.msg_level = 1
 
 MESH_FILE_NAME = "sf3d.vol"
@@ -60,7 +61,7 @@ Draw(gu)
 # vollist = {"core":1, "clad":2, "pml_clad_back":3, "pml_core_back":4,
 #            "pml_clad_front":5, "pml_core_front":6}
 # vol = CoefficientFunction([vollist.get(m,0) for m in mesh.GetMaterials()])
-# Draw(gu,mesh,"vols",draw_surf=False)
+# Draw(vol,mesh,"vols",draw_surf=False)
 # print("Checking 3D domains... press Enter to continue")
 # input()
 
@@ -193,7 +194,7 @@ beta = sqrt(-ev[which])
 sol2d_hcurl = sol2d.components[0].MDComponent(which)
 a = BilinearForm(fes3d, symmetric=True)
 a += ((1./ur) * curl(u) * curl(v) - kzero**2 * er * u * v)*dx
-c = Preconditioner(a, "bddc")
+c = Preconditioner(a, type="bddc")
 
 f = LinearForm(fes3d)
 # recalling that sold2d_hcurl is actually Et * beta,
@@ -228,3 +229,11 @@ res.data = bc_projector*(f.vec - a.mat * gfu.vec)
 print("res norm {}".format(Norm(res)))
 
 Draw(gfu, mesh, "sol3d")
+
+
+Draw(CF((gfu[0], gfu[1], 0)), mesh, "sol3dxy")  
+
+from viewOpt import loadView
+
+loadView()
+
