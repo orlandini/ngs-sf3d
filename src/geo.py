@@ -71,6 +71,6 @@ def GenMesh(d_box, l_domain, r_cyl, d_pml, el_core, el_clad, filename):
     domain_list = domain_list + [pml_clad_back,
                                  pml_core_back, pml_clad_front, pml_core_front]
 
-    geo = OCCGeometry(domain_list)
-    mesh = Mesh(geo.GenerateMesh(maxh=el_core))
+    geo = OCCGeometry(Glue(domain_list))
+    mesh = Mesh(geo.GenerateMesh(maxh=el_clad))
     mesh.ngmesh.Save(filename)

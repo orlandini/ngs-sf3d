@@ -1,11 +1,13 @@
+from viewOpt import loadView
 from ngsolve import *
 from numpy import random
 import netgen.gui
 from netgen.occ import *
+from ngsolve.krylovspace import GMRes
 import os
 from geo import GenMesh
 from modal import ModalAnalysis
-
+from mygmres import MyGMRes
 SetNumThreads(7)
 ngsglobals.msg_level = 1
 
@@ -22,9 +24,9 @@ ncore = 1.4457
 r_cyl = 8  # core radius
 # distance from center to end of cladding region(inner box)
 d_box = r_cyl + 3.5 * wl/nclad
-l_domain = 2*wl
-d_pml = 1.5*wl/nclad  # pml width
-elsize = 0.6
+l_domain = 1*wl
+d_pml = 1.75*wl/nclad  # pml width
+elsize = 0.35
 # element sizes are different in cladding or core
 el_clad = elsize*wl/nclad  # el size in cladding
 el_core = elsize*wl/ncore  # el size in core
@@ -39,7 +41,7 @@ mesh = Mesh("sf3d.vol").Curve(3)
 
 # setting up PMLs
 
-alphapml = 1.2j/d_pml
+alphapml = 1.75/d_pml
 
 boxmin = [-d_box, -d_box, -l_domain/2]
 boxmax = [d_box, d_box, l_domain/2]
@@ -49,8 +51,8 @@ mesh.SetPML(
 
 
 # checking surface domains
-surflist = {"core_2d": 1, "clad_2d": 2, "dirichlet_3d": 3, 'pml_clad_2d':4}
-surf = mesh.BoundaryCF(surflist,-1)
+surflist = {"core_2d": 1, "clad_2d": 2, "dirichlet_3d": 3, 'pml_clad_2d': 4}
+surf = mesh.BoundaryCF(surflist, -1)
 gu = GridFunction(H1(mesh), name='surfs')
 gu.Set(surf, definedon=~mesh.Boundaries(''))
 Draw(gu)
@@ -67,7 +69,7 @@ Draw(gu)
 
 
 # creating constitutive params for 2d problem
-er2dlist = {"core_2d": ncore**2, "clad_2d": nclad**2, "pml_clad_2d":nclad**2}
+er2dlist = {"core_2d": ncore**2, "clad_2d": nclad**2, "pml_clad_2d": nclad**2}
 er2d = mesh.BoundaryCF(er2dlist)
 
 ur2dlist = {"core_2d": 1, "clad_2d": 1, "pml_clad_2d": 1}
@@ -192,7 +194,7 @@ kzero = 2*pi/wl
 which = 0
 beta = sqrt(-ev[which])
 sol2d_hcurl = sol2d.components[0].MDComponent(which)
-a = BilinearForm(fes3d, symmetric=True)
+a = BilinearForm(fes3d, symmetric=False)
 a += ((1./ur) * curl(u) * curl(v) - kzero**2 * er * u * v)*dx
 c = Preconditioner(a, type="bddc")
 
@@ -200,8 +202,8 @@ f = LinearForm(fes3d)
 # recalling that sold2d_hcurl is actually Et * beta,
 # we dont need to insert it in the linear form
 
-#ps: i have ommited the ur since it is unitary and i wasnt sure
-#if the coefficient function would play well on the 2d domain
+# ps: i have ommited the ur since it is unitary and i wasnt sure
+# if the coefficient function would play well on the 2d domain
 f += (2j * sol2d_hcurl.Trace() * v.Trace())*ds("clad_2d|core_2d|pml_clad_2d")
 
 with TaskManager():
@@ -217,12 +219,12 @@ res = f.vec.CreateVector()
 #         inverse="pardiso") * f.vec
 
 
-
 print("solving system with ndofs {}".format(sum(fes3d.FreeDofs())))
 with TaskManager():
-    gmr = GMRESSolver(mat=a.mat, pre=c.mat, maxsteps=200,
-                      precision=1e-10, printrates=True)
-    gfu.vec.data = gmr * f.vec
+    # gmr = GMRESSolver(mat=a.mat, pre=c.mat, maxsteps=200,
+    #                      precision=1e-10, printrates=True)
+    # gfu.vec.data = gmr * f.vec
+    gfu.vec.data = MyGMRes(a.mat, f.vec, pre=c.mat, maxsteps=200, tol=1e-15,printrates=True)
 
 bc_projector = Projector(fes3d.FreeDofs(), True)
 res.data = bc_projector*(f.vec - a.mat * gfu.vec)
@@ -231,9 +233,7 @@ print("res norm {}".format(Norm(res)))
 Draw(gfu, mesh, "sol3d")
 
 
-Draw(CF((gfu[0], gfu[1], 0)), mesh, "sol3dxy")  
+Draw(CF((gfu[0], gfu[1], 0)), mesh, "sol3dxy")
 
-from viewOpt import loadView
 
-loadView()
-
+# loadView()
