@@ -5,7 +5,7 @@ import netgen.gui
 from netgen.occ import *
 from ngsolve.krylovspace import GMRes
 import os
-from geo import GenMesh
+from geo import GenMeshStepFiber
 from modal import ModalAnalysis
 from mygmres import MyGMRes
 SetNumThreads(7)
@@ -35,7 +35,8 @@ p_scatt = 2  # polynomial order of scattering analysis
 
 gen_mesh = True
 if gen_mesh or not os.path.isfile(MESH_FILE_NAME):
-    GenMesh(d_box, l_domain, r_cyl, d_pml, el_core, el_clad, MESH_FILE_NAME)
+    GenMeshStepFiber(d_box, l_domain, r_cyl, d_pml,
+                     el_core, el_clad, MESH_FILE_NAME)
 
 mesh = Mesh("sf3d.vol").Curve(3)
 

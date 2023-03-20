@@ -2,7 +2,7 @@ from netgen.occ import *
 from ngsolve import Mesh
 
 
-def GenMesh(d_box, l_domain, r_cyl, d_pml, el_core, el_clad, filename):
+def GenMeshStepFiber(d_box, l_domain, r_cyl, d_pml, el_core, el_clad, filename):
     cube_back = Box(Pnt(-d_box, -d_box, -l_domain/2), Pnt(d_box, d_box, 0))
     cube_front = Box(Pnt(-d_box, -d_box, 0), Pnt(d_box, d_box, l_domain/2))
     cyl = Cylinder(Pnt(0, 0, -l_domain/2), Z, r=r_cyl, h=l_domain)
