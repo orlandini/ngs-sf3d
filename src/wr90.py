@@ -24,16 +24,17 @@ er = 1 # relative electric permittivity
 
 width = 28.86
 height = 10.16
-l_domain = 1*wl
-d_pml = 2.5*wl  # pml width
+l_domain = 2.0*wl
+d_pml = 2.0*wl  # pml width
 elsize = wl/10
 # element sizes are different in cladding or core
 p_modal = 2  # polynomial order of hcurl space in modal analysis
 p_scatt = 2  # polynomial order of scattering analysis
 
+custom_pml = True
 gen_mesh = True
 if gen_mesh or not os.path.isfile(MESH_FILE_NAME):
-    GenMeshRectangularWaveguide(width,height,l_domain,d_pml,elsize,MESH_FILE_NAME)
+    GenMeshRectangularWaveguide(width,height,l_domain,d_pml,elsize,custom_pml,MESH_FILE_NAME)
 
 mesh = Mesh(MESH_FILE_NAME)
 
@@ -48,7 +49,11 @@ Draw(gu)
 # input()
 
 #checking volume domains
-vollist = {"air":1, "pml_front":2, "pml_back":3}
+
+pml_domains = 'pml_front|pml_back' if custom_pml else 'pml'
+
+
+vollist = {"air":1} | {d:i+2 for i,d in enumerate(pml_domains.split('|'))}
 vol = CoefficientFunction([vollist.get(m,0) for m in mesh.GetMaterials()])
 Draw(vol,mesh,"vols",draw_surf=False)
 # print("Checking 3D domains... press Enter to continue")
@@ -164,28 +169,31 @@ n1 \cross curl E1 + n2 \cross curl E2 =
 """
 
 # defining ur and er for volume domains
-alpha_pml = 0j
+alpha_pml = .1j
+
+alpha_pml = alpha_pml/d_pml if custom_pml else alpha_pml
 
 
+if custom_pml:
+    sz_d = {"air": 1,
+            "pml_back":  1- alpha_pml * (z+l_domain/2)*(z+l_domain/2)/(d_pml*d_pml),
+            "pml_front":  1- alpha_pml * (z-l_domain/2)*(z-l_domain/2)/(d_pml*d_pml)
+            }
 
-# sz_d = {"air": 1,
-#         "pml_back":  1- alpha_pml * (z+l_domain/2)*(z+l_domain/2)/(d_pml*d_pml),
-#         "pml_front":  1- alpha_pml * (z-l_domain/2)*(z-l_domain/2)/(d_pml*d_pml)
-#         }
+    sz = CoefficientFunction([sz_d[mat] for mat in mesh.GetMaterials()])
 
-# sz = CoefficientFunction([sz_d[mat] for mat in mesh.GetMaterials()])
-
-# er3d = CoefficientFunction((er*sz,0,0,0,er*sz,0,0,0,er/sz),dims=(3,3))
-# urinv3d = CoefficientFunction((ur/sz,0,0,0,ur/sz,0,0,0,ur*sz),dims=(3,3))
+    er3d = CoefficientFunction((er*sz,0,0,0,er*sz,0,0,0,er/sz),dims=(3,3))
+    urinv3d = CoefficientFunction((ur/sz,0,0,0,ur/sz,0,0,0,ur*sz),dims=(3,3))
+else:
 
 
-boxmin = [-width/2, -height/2, -l_domain/2]
-boxmax = [width/2, height/2, l_domain/2]
-mesh.SetPML(
-    pml.Cartesian(mins=boxmin, maxs=boxmax, alpha=alpha_pml),"pml_back|pml_front")
+    boxmin = [-width/2, -height/2, -l_domain/2]
+    boxmax = [width/2, height/2, l_domain/2]
+    mesh.SetPML(
+        pml.Cartesian(mins=boxmin, maxs=boxmax, alpha=alpha_pml),pml_domains)
 
-er3d = 1
-urinv3d = 1
+    er3d = 1
+    urinv3d = 1
 
 kzero = 2*pi/wl
 # we take the dominant mode
@@ -195,7 +203,7 @@ sol2d_hcurl = sol2d.components[0].MDComponent(which)
 a = BilinearForm(fes3d, symmetric=False)
 a += (urinv3d * curl(u) * curl(v) - kzero**2  * er3d * u * v)*dx
 # a += ((urinv3d * curl(u)) * (curl(v)) - kzero**2  * (er3d * u) * (v))*dx("air")
-# a += ((urinv3d * curl(u)) * (curl(v)) - kzero**2  * (er3d * u) * (v))*dx("pml_front|pml_back",intrules={TET:IntegrationRule(TET,15)})
+# a += ((urinv3d * curl(u)) * (curl(v)) - kzero**2  * (er3d * u) * (v))*dx(pml_domains,intrules={TET:IntegrationRule(TET,15)})
 c = Preconditioner(a, type="bddc")
 
 f = LinearForm(fes3d)
@@ -227,7 +235,7 @@ print("solving system with ndofs {}".format(sum(fes3d.FreeDofs())))
 
 with TaskManager():
     gfu.vec.data = MyGMRes(a.mat, f.vec, pre=c.mat,
-                           maxsteps=150, tol=1e-15, printrates=True)
+                           maxsteps=300, tol=1e-15, printrates=True)
 
 bc_projector = Projector(fes3d.FreeDofs(), True)
 res.data = bc_projector*(f.vec - a.mat * gfu.vec)

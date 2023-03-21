@@ -77,7 +77,7 @@ def GenMeshStepFiber(d_box, l_domain, r_cyl, d_pml, el_core, el_clad, filename):
 
 
 def GenMeshRectangularWaveguide(
-        width, height, l_domain, d_pml, el_size, filename):
+        width, height, l_domain, d_pml, el_size, custom_pml, filename):
 
     inner_domain_front = Box(
         Pnt(-width/2, -height/2, 0),
@@ -101,29 +101,44 @@ def GenMeshRectangularWaveguide(
     inner_domain_back.faces.Max(Z).name = 'air_2d'
     inner_domain_back.faces.Max(Z).edges.name = 'dirichlet_2d'
 
-    pml_back = Box(
-        Pnt(-width/2, -height/2, -l_domain/2-d_pml),
-        Pnt(width/2, height/2, -l_domain/2)
-    )
-    pml_back.faces.Min(X).name = 'dirichlet_3d'
-    pml_back.faces.Min(Y).name = 'dirichlet_3d'
-    pml_back.faces.Max(X).name = 'dirichlet_3d'
-    pml_back.faces.Max(Y).name = 'dirichlet_3d'
-    pml_back.faces.Min(Z).name = 'dirichlet_3d'
-    pml_back.mat("pml_back").maxh = el_size
+    domain_list = [inner_domain_front, inner_domain_back]
+    if not custom_pml:
+        whole_domain = Box(
+            Pnt(-width/2, -height/2, -l_domain/2-d_pml),
+            Pnt(width/2, height/2, l_domain/2+d_pml)
+        )
 
-    pml_front = Box(
-        Pnt(-width/2, -height/2, l_domain/2),
-        Pnt(width/2, height/2, l_domain/2+d_pml)
-    )
-    pml_front.faces.Min(X).name = 'dirichlet_3d'
-    pml_front.faces.Min(Y).name = 'dirichlet_3d'
-    pml_front.faces.Max(X).name = 'dirichlet_3d'
-    pml_front.faces.Max(Y).name = 'dirichlet_3d'
-    pml_front.faces.Max(Z).name = 'dirichlet_3d'
-    pml_front.mat("pml_front").maxh = el_size
+        whole_domain.faces.name = 'dirichlet_3d'
 
-    domain_list = [inner_domain_front, inner_domain_back, pml_front, pml_back]
+        pml = whole_domain - inner_domain_back - inner_domain_front
+        pml.mat("pml").maxh = el_size
+
+        domain_list += [pml]
+    else:
+        pml_back = Box(
+            Pnt(-width/2, -height/2, -l_domain/2-d_pml),
+            Pnt(width/2, height/2, -l_domain/2)
+        )
+        pml_back.faces.Min(X).name = 'dirichlet_3d'
+        pml_back.faces.Min(Y).name = 'dirichlet_3d'
+        pml_back.faces.Max(X).name = 'dirichlet_3d'
+        pml_back.faces.Max(Y).name = 'dirichlet_3d'
+        pml_back.faces.Min(Z).name = 'dirichlet_3d'
+        pml_back.mat("pml_back").maxh = el_size
+
+        pml_front = Box(
+            Pnt(-width/2, -height/2, l_domain/2),
+            Pnt(width/2, height/2, l_domain/2+d_pml)
+        )
+        pml_front.faces.Min(X).name = 'dirichlet_3d'
+        pml_front.faces.Min(Y).name = 'dirichlet_3d'
+        pml_front.faces.Max(X).name = 'dirichlet_3d'
+        pml_front.faces.Max(Y).name = 'dirichlet_3d'
+        pml_front.faces.Max(Z).name = 'dirichlet_3d'
+        pml_front.mat("pml_front").maxh = el_size
+
+        domain_list += [pml_front, pml_back]
+
     geo = OCCGeometry(Glue(domain_list))
     mesh = Mesh(geo.GenerateMesh(maxh=el_size))
     mesh.ngmesh.Save(filename)
