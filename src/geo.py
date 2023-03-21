@@ -74,3 +74,56 @@ def GenMeshStepFiber(d_box, l_domain, r_cyl, d_pml, el_core, el_clad, filename):
     geo = OCCGeometry(Glue(domain_list))
     mesh = Mesh(geo.GenerateMesh(maxh=el_clad))
     mesh.ngmesh.Save(filename)
+
+
+def GenMeshRectangularWaveguide(
+        width, height, l_domain, d_pml, el_size, filename):
+
+    inner_domain_front = Box(
+        Pnt(-width/2, -height/2, 0),
+        Pnt(width/2, height/2, l_domain/2)
+    )
+    inner_domain_front.faces.Min(X).name = 'dirichlet_3d'
+    inner_domain_front.faces.Min(Y).name = 'dirichlet_3d'
+    inner_domain_front.faces.Max(X).name = 'dirichlet_3d'
+    inner_domain_front.faces.Max(Y).name = 'dirichlet_3d'
+    inner_domain_front.mat("air").maxh = el_size
+    inner_domain_back = Box(
+        Pnt(-width/2, -height/2, -l_domain/2),
+        Pnt(width/2, height/2, 0)
+    )
+    inner_domain_back.faces.Min(X).name = 'dirichlet_3d'
+    inner_domain_back.faces.Min(Y).name = 'dirichlet_3d'
+    inner_domain_back.faces.Max(X).name = 'dirichlet_3d'
+    inner_domain_back.faces.Max(Y).name = 'dirichlet_3d'
+    inner_domain_back.mat("air").maxh = el_size
+
+    inner_domain_back.faces.Max(Z).name = 'air_2d'
+    inner_domain_back.faces.Max(Z).edges.name = 'dirichlet_2d'
+
+    pml_back = Box(
+        Pnt(-width/2, -height/2, -l_domain/2-d_pml),
+        Pnt(width/2, height/2, -l_domain/2)
+    )
+    pml_back.faces.Min(X).name = 'dirichlet_3d'
+    pml_back.faces.Min(Y).name = 'dirichlet_3d'
+    pml_back.faces.Max(X).name = 'dirichlet_3d'
+    pml_back.faces.Max(Y).name = 'dirichlet_3d'
+    pml_back.faces.Min(Z).name = 'dirichlet_3d'
+    pml_back.mat("pml_back").maxh = el_size
+
+    pml_front = Box(
+        Pnt(-width/2, -height/2, l_domain/2),
+        Pnt(width/2, height/2, l_domain/2+d_pml)
+    )
+    pml_front.faces.Min(X).name = 'dirichlet_3d'
+    pml_front.faces.Min(Y).name = 'dirichlet_3d'
+    pml_front.faces.Max(X).name = 'dirichlet_3d'
+    pml_front.faces.Max(Y).name = 'dirichlet_3d'
+    pml_front.faces.Max(Z).name = 'dirichlet_3d'
+    pml_front.mat("pml_front").maxh = el_size
+
+    domain_list = [inner_domain_front, inner_domain_back, pml_front, pml_back]
+    geo = OCCGeometry(Glue(domain_list))
+    mesh = Mesh(geo.GenerateMesh(maxh=el_size))
+    mesh.ngmesh.Save(filename)
