@@ -1,11 +1,9 @@
 from ngsolve import *
 
 
-def ModalAnalysis(fes, wl, ur, er, target):
+def ModalAnalysis(fes, wl, ur, er, target, domains):
     u, p = fes.TrialFunction()
     v, q = fes.TestFunction()
-
-    domains = "clad_2d|core_2d|pml_clad_2d"
     kzero = 2*pi/wl
     a = BilinearForm(fes, symmetric=True)
     a += ((1./ur) * curl(u).Trace() * curl(v).Trace() - kzero **

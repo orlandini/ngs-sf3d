@@ -108,13 +108,14 @@ finite dimensional counterpart is chosen as to respect the de rham diagram
 
 
 # creating FEM spaces for 2D problem
+domains_2d = "clad_2d|core_2d|pml_clad_2d"
 
 V2d = HCurl(
     mesh, order=p_modal, complex=True, dirichlet_bbnd="dirichlet_2d",
-    definedon=mesh.Boundaries("clad_2d|core_2d|pml_clad_2d"))
+    definedon=mesh.Boundaries(domains_2d))
 Q2d = H1(
     mesh, order=p_modal + 1, complex=True, dirichlet_bbnd="dirichlet_2d",
-    definedon=mesh.Boundaries("clad_2d|core_2d|pml_clad_2d"))
+    definedon=mesh.Boundaries(domains_2d))
 
 fes2d = V2d*Q2d
 
@@ -122,7 +123,8 @@ fes2d = V2d*Q2d
 # expected eigenvalues are around effective index * k0**2
 kzero = 2*pi/wl
 target = -ncore*ncore * kzero * kzero
-ev, sol2d = ModalAnalysis(fes2d, wl, ur2d, er2d, target)
+
+ev, sol2d = ModalAnalysis(fes2d, wl, ur2d, er2d, target, domains_2d)
 Draw(sol2d.components[0], mesh, "sol2d_hcurl", draw_surf=True, draw_vol=False)
 Draw(sol2d.components[1], mesh, "sol2d_hone", draw_surf=True, draw_vol=False)
 
