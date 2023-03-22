@@ -8,13 +8,14 @@ import os
 from geo import GenMeshStepFiber
 from modal import ModalAnalysis
 from mygmres import MyGMRes
-SetNumThreads(7)
+from timeit import default_timer as timer
+
 ngsglobals.msg_level = 1
 
 MESH_FILE_NAME = "sf3d.vol"
 # all dimensions are in microns
 
-wl = 4.0  # wavelength (in microns)
+wl = 15.0  # wavelength (in microns)
 
 urvals = 1  # relative magnetic permeability
 # refractive indices
@@ -24,12 +25,12 @@ ncore = 1.4457
 r_cyl = 8  # core radius
 # distance from center to end of cladding region(inner box)
 d_box = r_cyl + 3.5 * wl/nclad
-l_domain = 1*wl
+l_domain = 0.25*wl
 d_pml = 1.75*wl/nclad  # pml width
-elsize = 0.35
+nel_l = 5  # number of elements / wavelength
 # element sizes are different in cladding or core
-el_clad = elsize*wl/nclad  # el size in cladding
-el_core = elsize*wl/ncore  # el size in core
+el_clad = (wl/nclad)/nel_l  # el size in cladding
+el_core = (wl/ncore)/nel_l  # el size in core
 p_modal = 2  # polynomial order of hcurl space in modal analysis
 p_scatt = 2  # polynomial order of scattering analysis
 
@@ -38,11 +39,11 @@ if gen_mesh or not os.path.isfile(MESH_FILE_NAME):
     GenMeshStepFiber(d_box, l_domain, r_cyl, d_pml,
                      el_core, el_clad, MESH_FILE_NAME)
 
-mesh = Mesh("sf3d.vol").Curve(3)
+mesh = Mesh(MESH_FILE_NAME).Curve(p_scatt)
 
 # setting up PMLs
 
-alphapml = 1.75/d_pml
+alphapml = 2.0j/d_pml
 
 boxmin = [-d_box, -d_box, -l_domain/2]
 boxmax = [d_box, d_box, l_domain/2]
@@ -197,7 +198,8 @@ kzero = 2*pi/wl
 which = 0
 beta = sqrt(-ev[which])
 sol2d_hcurl = sol2d.components[0].MDComponent(which)
-a = BilinearForm(fes3d, symmetric=False)
+a = BilinearForm(fes3d, symmetric=True, symmetric_storage=True,
+                 hermitian=False)
 a += ((1./ur) * curl(u) * curl(v) - kzero**2 * er * u * v)*dx
 c = Preconditioner(a, type="bddc")
 
@@ -208,6 +210,8 @@ f = LinearForm(fes3d)
 # ps: i have ommited the ur since it is unitary and i wasnt sure
 # if the coefficient function would play well on the 2d domain
 f += (2j * sol2d_hcurl.Trace() * v.Trace())*ds("clad_2d|core_2d|pml_clad_2d")
+
+print("assembling system with ndofs {}".format(sum(fes3d.FreeDofs())))
 
 with TaskManager():
     a.Assemble()
@@ -223,20 +227,26 @@ res = f.vec.CreateVector()
 
 
 print("solving system with ndofs {}".format(sum(fes3d.FreeDofs())))
+s_begin = timer()
 with TaskManager():
     # gmr = GMRESSolver(mat=a.mat, pre=c.mat, maxsteps=200,
     #                      precision=1e-10, printrates=True)
     # gfu.vec.data = gmr * f.vec
-    gfu.vec.data = MyGMRes(a.mat, f.vec, pre=c.mat, maxsteps=200, tol=1e-15,printrates=True)
+    gfu.vec.data = GMRes(a.mat, f.vec, pre=c.mat,
+                         maxsteps=350, tol=1e-15, printrates=True)
 
 bc_projector = Projector(fes3d.FreeDofs(), True)
 res.data = bc_projector*(f.vec - a.mat * gfu.vec)
+
+s_end = timer()
+
+print("solved system in {} seconds".format(s_end-s_begin))
 print("res norm {}".format(Norm(res)))
 
 Draw(gfu, mesh, "sol3d")
-
-
 Draw(CF((gfu[0], gfu[1], 0)), mesh, "sol3dxy")
+Draw(CF(gfu[2]), mesh, "sol3dz")
+Draw(CF((gfu[0].real, gfu[1].real, gfu[2].real)), mesh, "sol3dre")
 
 
 # loadView()
