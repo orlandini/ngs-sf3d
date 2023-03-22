@@ -8,6 +8,7 @@ import os
 from geo import GenMeshRectangularWaveguide
 from modal import ModalAnalysis
 from mygmres import MyGMRes
+from timeit import default_timer as timer
 
 SetNumThreads(7)
 ngsglobals.msg_level = 1
@@ -25,13 +26,14 @@ er = 1 # relative electric permittivity
 width = 28.86
 height = 10.16
 l_domain = 2.0*wl
-d_pml = 2.0*wl  # pml width
-elsize = wl/10
+d_pml = 2.0*wl  # pml width (2.0 will converge in iterative solver, 0.5 only in direct)
+elsize = wl/8
 # element sizes are different in cladding or core
 p_modal = 2  # polynomial order of hcurl space in modal analysis
 p_scatt = 2  # polynomial order of scattering analysis
 
 custom_pml = True
+direct_solve = False
 gen_mesh = True
 if gen_mesh or not os.path.isfile(MESH_FILE_NAME):
     GenMeshRectangularWaveguide(width,height,l_domain,d_pml,elsize,custom_pml,MESH_FILE_NAME)
@@ -116,6 +118,37 @@ Draw(sol2d.components[0], mesh, "sol2d_hcurl", draw_surf=True, draw_vol=False)
 Draw(sol2d.components[1], mesh, "sol2d_hone", draw_surf=True, draw_vol=False)
 
 # now we go to the 3D problem
+
+# defining pml, ur and er for volume domains
+
+
+
+alpha_pml = 6.0j/d_pml if not custom_pml else 1.1j 
+"""
+note: for d_pml == 2.0, 6j and 1.1j will converge with both direct and iterative solver
+for d_pml = 0.5, 10j and 5j will converge ONLY for direct
+"""
+
+if custom_pml:
+    sz_d = {"air": 1,
+            "pml_back":  1- alpha_pml * (z+l_domain/2)/d_pml*(z+l_domain/2)/d_pml,
+            "pml_front":  1- alpha_pml * (z-l_domain/2)/d_pml*(z-l_domain/2)/d_pml
+            }
+
+    sz = CoefficientFunction([sz_d[mat] for mat in mesh.GetMaterials()])
+
+    er3d = CoefficientFunction((er*sz,0,0,0,er*sz,0,0,0,er/sz),dims=(3,3))
+    urinv3d = CoefficientFunction((ur/sz,0,0,0,ur/sz,0,0,0,ur*sz),dims=(3,3))
+else:
+    boxmin = [-width/2, -height/2, -l_domain/2]
+    boxmax = [width/2, height/2, l_domain/2]
+    mesh.SetPML(
+        pml.Cartesian(mins=boxmin, maxs=boxmax, alpha=alpha_pml),pml_domains)
+
+    er3d = 1
+    urinv3d = 1
+
+#create FE space
 fes3d = HCurl(mesh, order=p_scatt, complex=True,
               dirichlet="dirichlet_3d")
 
@@ -169,42 +202,13 @@ n1 \cross curl E1 + n2 \cross curl E2 =
 -2 j beta (Emx, Emy, 0) . F ds = - 2 j beta Em.Trace() * F.Trace() ds
 """
 
-# defining ur and er for volume domains
-alpha_pml = .1j
-
-alpha_pml = alpha_pml/d_pml if custom_pml else alpha_pml
-
-
-if custom_pml:
-    sz_d = {"air": 1,
-            "pml_back":  1- alpha_pml * (z+l_domain/2)*(z+l_domain/2)/(d_pml*d_pml),
-            "pml_front":  1- alpha_pml * (z-l_domain/2)*(z-l_domain/2)/(d_pml*d_pml)
-            }
-
-    sz = CoefficientFunction([sz_d[mat] for mat in mesh.GetMaterials()])
-
-    er3d = CoefficientFunction((er*sz,0,0,0,er*sz,0,0,0,er/sz),dims=(3,3))
-    urinv3d = CoefficientFunction((ur/sz,0,0,0,ur/sz,0,0,0,ur*sz),dims=(3,3))
-else:
-
-
-    boxmin = [-width/2, -height/2, -l_domain/2]
-    boxmax = [width/2, height/2, l_domain/2]
-    mesh.SetPML(
-        pml.Cartesian(mins=boxmin, maxs=boxmax, alpha=alpha_pml),pml_domains)
-
-    er3d = 1
-    urinv3d = 1
-
 kzero = 2*pi/wl
-# we take the dominant mode
-which = 0
+# we take the TM mode
+which = max([3,4],key = lambda x: abs(Integrate(sol2d.components[1].MDComponent(x),mesh.Boundaries("air_2d"))))
 beta = sqrt(-ev[which])
 sol2d_hcurl = sol2d.components[0].MDComponent(which)
-a = BilinearForm(fes3d, symmetric=False)
+a = BilinearForm(fes3d, symmetric=True,symmetric_storage=True,hermitian=False)
 a += (urinv3d * curl(u) * curl(v) - kzero**2  * er3d * u * v)*dx
-# a += ((urinv3d * curl(u)) * (curl(v)) - kzero**2  * (er3d * u) * (v))*dx("air")
-# a += ((urinv3d * curl(u)) * (curl(v)) - kzero**2  * (er3d * u) * (v))*dx(pml_domains,intrules={TET:IntegrationRule(TET,15)})
 c = Preconditioner(a, type="bddc")
 
 f = LinearForm(fes3d)
@@ -219,6 +223,7 @@ with TaskManager():
     a.Assemble()
     f.Assemble()
 
+c.Update()
 gfu = GridFunction(fes3d)
 
 res = f.vec.CreateVector()
@@ -227,25 +232,32 @@ res = f.vec.CreateVector()
 print("solving system with ndofs {}".format(sum(fes3d.FreeDofs())))
 
 
+s_begin = timer()
 
-
-# with TaskManager():
-#     gfu.vec.data = a.mat.Inverse(
-#         fes3d.FreeDofs(),
-#         inverse="pardiso") * f.vec
-
-with TaskManager():
-    gfu.vec.data = MyGMRes(a.mat, f.vec, pre=c.mat,
-                           maxsteps=300, tol=1e-15, printrates=True)
+if direct_solve:
+    with TaskManager():
+        gfu.vec.data = a.mat.Inverse(
+            fes3d.FreeDofs(),
+            inverse="pardiso") * f.vec
+else:
+    with TaskManager():
+        # gmr = GMRESSolver(mat=a.mat, pre=c.mat, maxsteps=350,
+        #                  precision=-1, printrates=True)
+        # gfu.vec.data = gmr * f.vec
+        gfu.vec.data = GMRes(a.mat, f.vec, pre=c.mat,
+                             maxsteps=350, tol=1e-15, printrates=True)
 
 bc_projector = Projector(fes3d.FreeDofs(), True)
 res.data = bc_projector*(f.vec - a.mat * gfu.vec)
+
+s_end = timer()
+
+print("solved system in {} seconds".format(s_end-s_begin))
 print("res norm {}".format(Norm(res)))
 
 Draw(gfu, mesh, "sol3d")
-
-
 Draw(CF((gfu[0], gfu[1], 0)), mesh, "sol3dxy")
-
+Draw(CF(gfu[2]), mesh, "sol3dz")
+Draw(CF((gfu[0].real, gfu[1].real, gfu[2].real)), mesh, "sol3dre")
 
 # loadView()
