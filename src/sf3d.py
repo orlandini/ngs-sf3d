@@ -8,6 +8,7 @@ import os
 from geo import GenMeshStepFiber
 from modal import ModalAnalysis
 from mygmres import MyGMRes
+from precond import CreatePrecond
 from timeit import default_timer as timer
 
 ngsglobals.msg_level = 1
@@ -15,7 +16,7 @@ ngsglobals.msg_level = 1
 MESH_FILE_NAME = "sf3d.vol"
 # all dimensions are in microns
 
-wl = 15.0  # wavelength (in microns)
+wl = 4.0  # wavelength (in microns)
 
 urvals = 1  # relative magnetic permeability
 # refractive indices
@@ -201,7 +202,6 @@ sol2d_hcurl = sol2d.components[0].MDComponent(which)
 a = BilinearForm(fes3d, symmetric=True, symmetric_storage=True,
                  hermitian=False)
 a += ((1./ur) * curl(u) * curl(v) - kzero**2 * er * u * v)*dx
-c = Preconditioner(a, type="bddc")
 
 f = LinearForm(fes3d)
 # recalling that sold2d_hcurl is actually Et * beta,
@@ -219,6 +219,9 @@ with TaskManager():
 
 gfu = GridFunction(fes3d)
 
+
+pre = CreatePrecond(mesh, fes3d, a)
+print("\rCreated pre!")
 res = f.vec.CreateVector()
 # with TaskManager():
 #     gfu.vec.data = a.mat.Inverse(
@@ -232,8 +235,8 @@ with TaskManager():
     # gmr = GMRESSolver(mat=a.mat, pre=c.mat, maxsteps=200,
     #                      precision=1e-10, printrates=True)
     # gfu.vec.data = gmr * f.vec
-    gfu.vec.data = GMRes(a.mat, f.vec, pre=c.mat,
-                         maxsteps=350, tol=1e-15, printrates=True)
+    gfu.vec.data = GMRes(a.mat, f.vec, pre=pre,
+                         maxsteps=100, tol=1e-15, printrates=True, restart=50)
 
 bc_projector = Projector(fes3d.FreeDofs(), True)
 res.data = bc_projector*(f.vec - a.mat * gfu.vec)
@@ -249,4 +252,4 @@ Draw(CF(gfu[2]), mesh, "sol3dz")
 Draw(CF((gfu[0].real, gfu[1].real, gfu[2].real)), mesh, "sol3dre")
 
 
-# loadView()
+loadView()
