@@ -1,7 +1,7 @@
 from ngsolve import *
 
 
-def ModalAnalysis(fes, wl, ur, er, target, domains):
+def ModalAnalysis(fes, wl, ur, er, target, domains, nev):
     u, p = fes.TrialFunction()
     v, q = fes.TestFunction()
     kzero = 2*pi/wl
@@ -19,12 +19,14 @@ def ModalAnalysis(fes, wl, ur, er, target, domains):
           2*er * p * q) * ds(domains)
 
     b.Assemble()
-
-    gfu = GridFunction(fes, multidim=10, name="sol")
+    md = min(nev*4, 10)
+    gfu = GridFunction(fes, multidim=md, name="sol")
     with TaskManager():
         ev = ArnoldiSolver(a.mat, b.mat, freedofs=fes.FreeDofs(),
                            vecs=list(gfu.vecs), shift=target)
-        beta = -1.*sqrt(complex(ev[0]))
-        print(
-            "\nev {} target {} ev/kzero {} ".format(ev[0], target, ev[0]/(kzero**2)))
+        gfu.AddMultiDimComponent
+        print("target {}".format(target))
+        for i in range(nev):
+            print(
+                "ev {} ev/kzero {}".format(ev[i], ev[i]/(kzero**2)))
         return ev, gfu

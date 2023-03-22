@@ -123,8 +123,8 @@ fes2d = V2d*Q2d
 # expected eigenvalues are around effective index * k0**2
 kzero = 2*pi/wl
 target = -ncore*ncore * kzero * kzero
-
-ev, sol2d = ModalAnalysis(fes2d, wl, ur2d, er2d, target, domains_2d)
+nev = 1
+ev, sol2d = ModalAnalysis(fes2d, wl, ur2d, er2d, target, domains_2d, nev)
 Draw(sol2d.components[0], mesh, "sol2d_hcurl", draw_surf=True, draw_vol=False)
 Draw(sol2d.components[1], mesh, "sol2d_hone", draw_surf=True, draw_vol=False)
 
