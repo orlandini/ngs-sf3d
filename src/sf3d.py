@@ -236,7 +236,7 @@ with TaskManager():
     #                      precision=1e-10, printrates=True)
     # gfu.vec.data = gmr * f.vec
     gfu.vec.data = GMRes(a.mat, f.vec, pre=pre,
-                         maxsteps=100, tol=1e-15, printrates=True, restart=50)
+                         maxsteps=100, tol=1e-15, printrates=True, restart=100)
 
 bc_projector = Projector(fes3d.FreeDofs(), True)
 res.data = bc_projector*(f.vec - a.mat * gfu.vec)
