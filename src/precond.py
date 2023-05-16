@@ -21,22 +21,29 @@ class SymmetricGS(BaseMatrix):
 def ElPatchBlocks(mesh, fes):
     blocks = []
     freedofs = fes.FreeDofs()
+
+    #one block per element, working
+    
     for el in mesh.Elements():
-        eldofs = set()
-        eldofs |= set(d for d in fes.GetDofNrs(el) if freedofs[d])
+        eldofs = set(d for d in fes.GetDofNrs(el) if freedofs[d])
         blocks.append(eldofs)
-    # for e in mesh.edges:
-    #     edofs = set()
-    #     for el in mesh[e].elements:
-    #         edofs |= set(d for d in fes.GetDofNrs(el)
-    #                      if freedofs[d])
-    #     blocks.append(edofs)
+
+    # one block per edge, working
+    
+    # for edge in mesh.edges:
+    #     edgedofs = set(d for d in fes.GetDofNrs(edge) if freedofs[d])
+    #     blocks.append(edgedofs)
+
+        
+    # AFW precond. it doesnt seem to work
+    
     # for v in mesh.vertices:
     #     vdofs = set()
-    #     for el in mesh[v].elements:
-    #         vdofs |= set(d for d in fes.GetDofNrs(el)
+    #     for edge in mesh[v].edges:
+    #         vdofs |= set(d for d in fes.GetDofNrs(edge)
     #                      if freedofs[d])
     #     blocks.append(vdofs)
+        
     return blocks
 
 
