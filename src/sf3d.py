@@ -32,15 +32,18 @@ nel_l = 5  # number of elements / wavelength
 # element sizes are different in cladding or core
 el_clad = (wl/nclad)/nel_l  # el size in cladding
 el_core = (wl/ncore)/nel_l  # el size in core
-p_modal = 2  # polynomial order of hcurl space in modal analysis
-p_scatt = 2  # polynomial order of scattering analysis
+p_modal = 0  # polynomial order of hcurl space in modal analysis
+p_scatt = 0  # polynomial order of scattering analysis
 
 gen_mesh = True
 if gen_mesh or not os.path.isfile(MESH_FILE_NAME):
     GenMeshStepFiber(d_box, l_domain, r_cyl, d_pml,
                      el_core, el_clad, MESH_FILE_NAME)
 
-mesh = Mesh(MESH_FILE_NAME).Curve(p_scatt)
+if p_scatt > 0:
+    mesh = Mesh(MESH_FILE_NAME).Curve(p_scatt)
+else:
+    mesh = Mesh(MESH_FILE_NAME)
 
 # setting up PMLs
 
